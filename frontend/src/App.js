@@ -1,7 +1,19 @@
+import React, { useEffect } from 'react';
 import logo from './logo.svg';
 import './App.css';
 
 function App() {
+  useEffect(() => {
+    // If redirected back with ?dashboard, go to dashboard
+    if (window.location.search.includes('dashboard')) {
+      window.location.href = '/dashboard';
+    }
+  }, []);
+
+  const handleLogin = () => {
+    window.location.assign('/login/github');
+  };
+
   return (
     <div className="App">
       <header className="App-header">
@@ -17,6 +29,7 @@ function App() {
         >
           Learn React
         </a>
+        <button onClick={handleLogin}>Login with GitHub</button>
       </header>
     </div>
   );
