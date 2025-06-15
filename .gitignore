@@ -1,0 +1,61 @@
+# ======================
+# React / Node (frontend)
+/frontend/node_modules/
+/frontend/build/
+/frontend/.env
+/frontend/.eslintcache
+
+# ======================
+# Flask / Python (backend)
+/backend/__pycache__/
+/backend/*.pyc
+/backend/*.pyo
+/backend/.env
+/backend/env/
+/backend/venv/
+/backend/instance/
+/backend/.mypy_cache/
+/backend/.pytest_cache/
+/backend/.coverage
+/backend/coverage.xml
+
+# ======================
+# Virtual Environments (common)
+.env
+.venv
+env/
+venv/
+
+# ======================
+# Heroku
+*.log
+.heroku/
+Procfile
+
+# ======================
+# Docker
+*.pid
+*.seed
+*.tar
+*.db
+*.sqlite3
+docker-compose.override.yml
+Dockerfile
+docker-compose.yml
+*.dockerfile
+
+# ======================
+# IDEs & OS junk
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+*.bak
+*.tmp
+
+# ======================
+# Test / Coverage
+htmlcov/
+coverage/
+.pytest_cache/
