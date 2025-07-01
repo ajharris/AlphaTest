@@ -23,13 +23,17 @@ async function fetchAllRepos(token) {
   return repos;
 }
 
-export default function RepoDropdown({ token, onSelect }) {
-  const [repos, setRepos] = useState([]);
+export default function RepoDropdown({ token, repos: reposProp, selectedRepo, onSelect }) {
+  const [repos, setRepos] = useState(reposProp || []);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [selected, setSelected] = useState(null);
+  const [selected, setSelected] = useState(selectedRepo || null);
 
   useEffect(() => {
+    if (reposProp) {
+      setRepos(reposProp);
+      return;
+    }
     if (!token) return;
     setLoading(true);
     setError(null);
@@ -41,20 +45,31 @@ export default function RepoDropdown({ token, onSelect }) {
         else setError('Failed to fetch repositories');
       })
       .finally(() => setLoading(false));
-  }, [token]);
+  }, [token, reposProp]);
+
+  useEffect(() => {
+    if (selectedRepo) setSelected(selectedRepo);
+  }, [selectedRepo]);
 
   const handleChange = e => {
     const idx = e.target.value;
-    const repo = repos[idx];
+    // Defensive: idx may be '' if placeholder is selected
+    const repo = idx !== '' ? repos[idx] : null;
     setSelected(repo);
-    if (onSelect) onSelect(repo);
+    if (onSelect && repo) onSelect(repo);
   };
 
   return (
     <div>
       {loading && <span>Loading...</span>}
       {error && <span role="alert">{error}</span>}
-      <select data-testid="repo-dropdown" onChange={handleChange} disabled={loading || !!error}>
+      <select
+        data-testid="repo-dropdown"
+        onChange={handleChange}
+        disabled={loading || !!error}
+        value={selected ? repos.findIndex(r => r.id === selected.id) : ''}
+        role="combobox"
+      >
         <option value="">Select a repository</option>
         {repos.map((repo, i) => (
           <option key={repo.id} value={i}>
@@ -67,6 +82,8 @@ export default function RepoDropdown({ token, onSelect }) {
 }
 
 RepoDropdown.propTypes = {
-  token: PropTypes.string.isRequired,
+  token: PropTypes.string,
+  repos: PropTypes.array,
+  selectedRepo: PropTypes.object,
   onSelect: PropTypes.func,
 };

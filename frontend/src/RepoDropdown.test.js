@@ -181,3 +181,10 @@ describe('RepoDropdown', () => {
     expect(submitBtn).not.toBeDisabled();
   });
 });
+
+
+// Removed fetchUserRepos tests as they are not defined in this file
+
+// ...existing code...
+
+// Removed fetchUserRepos API tests: these belong in fetchUserRepos.test.js
