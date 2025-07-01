@@ -8,7 +8,8 @@ LOGFILE="test_run_$(date +%Y%m%d_%H%M%S).log"
 echo "Running backend tests..." | tee -a "$LOGFILE"
 cd backend
 export FLASK_ENV=testing
-if ! python3 -m unittest discover -s . -p 'test_*.py' 2>&1 | tee -a "../$LOGFILE"; then
+# Run backend tests with timeout (5 minutes)
+if ! timeout 300 /workspaces/AlphaTest/.venv/bin/python run_tests_with_timeout.py 2>&1 | tee -a "../$LOGFILE"; then
   echo "Backend tests failed. See $LOGFILE for details." | tee -a "../$LOGFILE"
   exit 1
 fi
@@ -23,7 +24,9 @@ if ! npm install --no-audit --no-fund 2>&1 | tee -a "../$LOGFILE"; then
   echo "npm install failed. See $LOGFILE for details." | tee -a "../$LOGFILE"
   exit 1
 fi
-if ! npm test -- --watchAll=false 2>&1 | tee -a "../$LOGFILE"; then
+# Run frontend tests with timeout (10 minutes) and environment timeout
+export JEST_TIMEOUT=30000
+if ! timeout 600 npm test -- --watchAll=false 2>&1 | tee -a "../$LOGFILE"; then
   echo "Frontend tests failed. See $LOGFILE for details." | tee -a "../$LOGFILE"
   exit 1
 fi
