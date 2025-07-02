@@ -7,7 +7,7 @@ const getBrowserDeviceInfo = () => {
   const userAgent = navigator.userAgent;
   const platform = navigator.platform;
   const language = navigator.language;
-  const screenResolution = `${screen.width}x${screen.height}`;
+  const screenResolution = `${window.screen.width}x${window.screen.height}`;
   const viewport = `${window.innerWidth}x${window.innerHeight}`;
   
   return {
@@ -20,7 +20,7 @@ const getBrowserDeviceInfo = () => {
   };
 };
 
-const BugReportForm = ({ onSubmit, isSubmitting = false }) => {
+const BugReportForm = ({ onSubmit, isSubmitting = false, selectedRepo }) => {
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -138,7 +138,11 @@ const BugReportForm = ({ onSubmit, isSubmitting = false }) => {
     
     try {
       setSubmitStatus(null);
-      await onSubmit(formData);
+      const submitData = {
+        ...formData,
+        repository_id: selectedRepo?.id || null
+      };
+      await onSubmit(submitData);
       setSubmitStatus('success');
       setSubmitMessage('Bug report submitted successfully!');
       
@@ -174,6 +178,15 @@ Timestamp: ${deviceInfo.timestamp}`;
   return (
     <form onSubmit={handleSubmit} className="bug-report-form">
       <h2>Report a Bug</h2>
+      
+      {selectedRepo && (
+        <div className="selected-repository">
+          <strong>Repository:</strong> {selectedRepo.owner.login}/{selectedRepo.name}
+          {selectedRepo.description && (
+            <p className="repo-description">{selectedRepo.description}</p>
+          )}
+        </div>
+      )}
       
       {submitStatus === 'success' && (
         <div className="success-message" role="alert">
@@ -268,7 +281,8 @@ Timestamp: ${deviceInfo.timestamp}`;
 
 BugReportForm.propTypes = {
   onSubmit: PropTypes.func.isRequired,
-  isSubmitting: PropTypes.bool
+  isSubmitting: PropTypes.bool,
+  selectedRepo: PropTypes.object
 };
 
 export default BugReportForm;

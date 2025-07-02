@@ -61,8 +61,8 @@ export default function RepoDropdown({ token, repos: reposProp, selectedRepo, on
 
   return (
     <div>
-      {loading && <span>Loading...</span>}
-      {error && <span role="alert">{error}</span>}
+      {loading && <span className="loading">Loading repositories...</span>}
+      {error && <span className="error" role="alert">{error}</span>}
       <select
         data-testid="repo-dropdown"
         onChange={handleChange}

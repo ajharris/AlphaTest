@@ -36,3 +36,56 @@
     transform: rotate(360deg);
   }
 }
+
+/* Repository Dropdown Styles */
+.repo-dropdown-container {
+  margin: 20px 0;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 20px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.repo-dropdown-container h3 {
+  margin: 0 0 15px 0;
+  font-size: 18px;
+  color: #61dafb;
+}
+
+.repo-dropdown-container select {
+  background: #fff;
+  color: #333;
+  border: 2px solid #61dafb;
+  border-radius: 4px;
+  padding: 10px 15px;
+  font-size: 14px;
+  min-width: 300px;
+  max-width: 500px;
+  cursor: pointer;
+}
+
+.repo-dropdown-container select:focus {
+  outline: none;
+  border-color: #21a1c4;
+  box-shadow: 0 0 5px rgba(97, 218, 251, 0.3);
+}
+
+.repo-dropdown-container .selected-repo {
+  margin-top: 10px;
+  font-size: 14px;
+  color: #61dafb;
+  background: rgba(97, 218, 251, 0.1);
+  padding: 8px 12px;
+  border-radius: 4px;
+  border: 1px solid rgba(97, 218, 251, 0.3);
+}
+
+.repo-dropdown-container .loading {
+  color: #ffd700;
+  font-style: italic;
+}
+
+.repo-dropdown-container .error {
+  color: #ff6b6b;
+  font-weight: bold;
+}

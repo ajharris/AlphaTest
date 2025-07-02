@@ -286,6 +286,7 @@ describe('BugReportForm', () => {
           title: 'Bug Title',
           description: 'Bug Description',
           screenshot: imageFile,
+          repository_id: null,
           deviceInfo: expect.objectContaining({
             userAgent: expect.stringContaining('Mozilla/5.0'),
             platform: 'Win32',
@@ -316,6 +317,7 @@ describe('BugReportForm', () => {
           title: 'Bug Title',
           description: 'Bug Description',
           screenshot: null,
+          repository_id: null,
           deviceInfo: expect.any(Object)
         });
       });
