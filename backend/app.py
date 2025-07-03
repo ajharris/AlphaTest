@@ -270,6 +270,11 @@ def get_user_repositories():
         return jsonify({"error": f"Failed to process repositories: {str(e)}"}), 500
 
 def allowed_file(filename):
+    if not filename or not filename.strip():
+        return False
+    # Prevent files that start with a dot (hidden files)
+    if filename.startswith('.'):
+        return False
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
@@ -293,16 +298,22 @@ def validate_bug_report_data(data):
     """Validate bug report submission data"""
     errors = []
     
-    if not data.get('title', '').strip():
+    # Ensure title is a string and not empty
+    title = data.get('title', '')
+    if not isinstance(title, str):
+        title = str(title) if title is not None else ''
+    if not title.strip():
         errors.append('Title is required')
-    
-    if not data.get('description', '').strip():
-        errors.append('Description is required')
-    
-    if len(data.get('title', '')) > 200:
+    elif len(title) > 200:
         errors.append('Title must be less than 200 characters')
     
-    if len(data.get('description', '')) > 5000:
+    # Ensure description is a string and not empty
+    description = data.get('description', '')
+    if not isinstance(description, str):
+        description = str(description) if description is not None else ''
+    if not description.strip():
+        errors.append('Description is required')
+    elif len(description) > 5000:
         errors.append('Description must be less than 5000 characters')
     
     return errors

@@ -217,8 +217,10 @@ class TestBugReportAPI(unittest.TestCase):
                                data=form_data,
                                content_type='multipart/form-data')
         
-        # Should still succeed but with secure filename
-        self.assertEqual(response.status_code, 201)
+        # The file should be rejected due to the dangerous filename pattern
+        self.assertEqual(response.status_code, 400)
+        data = response.get_json()
+        self.assertIn('Invalid file type', data['error'])
 
     # Test 4: Malicious File Upload Protection
     def test_non_image_file_is_rejected(self):
