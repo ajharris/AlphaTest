@@ -102,11 +102,11 @@ def serve():
 @app.route("/<path:path>")
 def static_proxy(path):
     normalized_path = os.path.normpath(path)
-    if not os.path.commonprefix([app.static_folder, os.path.join(app.static_folder, normalized_path)]) == app.static_folder:
+    full_path = os.path.realpath(os.path.join(app.static_folder, normalized_path))
+    if not full_path.startswith(os.path.realpath(app.static_folder)):
         return jsonify({"error": "Invalid path"}), 404
-    file_path = os.path.join(app.static_folder, normalized_path)
-    if os.path.exists(file_path):
-        return send_from_directory(app.static_folder, path)
+    if os.path.exists(full_path):
+        return send_from_directory(app.static_folder, os.path.relpath(full_path, app.static_folder))
     else:
         return send_from_directory(app.static_folder, "index.html")
 
