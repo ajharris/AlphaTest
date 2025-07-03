@@ -20,7 +20,29 @@ describe('Bug Report Integration Tests', () => {
   test('complete bug report submission flow with all fields', async () => {
     const user = userEvent;
     
-    // Mock successful API response
+    // Mock auth check API call
+    fetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        user: { login: 'testuser' },
+        access_token: 'test_token'
+      })
+    });
+
+    // Mock GitHub repos API call
+    fetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ([
+        { 
+          id: 1, 
+          name: 'test-repo', 
+          full_name: 'testuser/test-repo',
+          owner: { login: 'testuser' }
+        }
+      ])
+    });
+
+    // Mock successful bug report submission
     fetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({
@@ -31,6 +53,11 @@ describe('Bug Report Integration Tests', () => {
     });
 
     render(<App />);
+    
+    // Wait for authentication and repo loading to complete
+    await waitFor(() => {
+      expect(screen.getByText('Welcome, testuser!')).toBeInTheDocument();
+    });
     
     // Show the bug report form
     const showFormButton = screen.getByText('Show Bug Report Form');
@@ -77,7 +104,12 @@ describe('Bug Report Integration Tests', () => {
   test('bug report submission handles API errors gracefully', async () => {
     const user = userEvent;
     
-    // Mock API error response
+    // Mock auth check to return unauthenticated
+    fetch.mockResolvedValueOnce({
+      ok: false
+    });
+
+    // Mock API error response for bug report submission
     fetch.mockResolvedValueOnce({
       ok: false,
       json: async () => ({
@@ -88,6 +120,10 @@ describe('Bug Report Integration Tests', () => {
     render(<App />);
     
     // Show the bug report form
+    await waitFor(() => {
+      expect(screen.getByText('Login with GitHub')).toBeInTheDocument();
+    });
+    
     const showFormButton = screen.getByText('Show Bug Report Form');
     await user.click(showFormButton);
     
@@ -109,7 +145,17 @@ describe('Bug Report Integration Tests', () => {
   test('form validation prevents submission with empty required fields', async () => {
     const user = userEvent;
 
+    // Mock auth check to return unauthenticated  
+    fetch.mockResolvedValueOnce({
+      ok: false
+    });
+
     render(<App />);
+    
+    // Wait for auth check to complete
+    await waitFor(() => {
+      expect(screen.getByText('Login with GitHub')).toBeInTheDocument();
+    });
     
     // Show the bug report form
     const showFormButton = screen.getByText('Show Bug Report Form');
@@ -123,14 +169,27 @@ describe('Bug Report Integration Tests', () => {
     expect(screen.getByText('Title is required')).toBeInTheDocument();
     expect(screen.getByText('Description is required')).toBeInTheDocument();
     
-    // Verify API was not called
-    expect(fetch).not.toHaveBeenCalled();
+    // Verify only auth API was called (for the initial check)
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch).toHaveBeenCalledWith('/api/user', expect.objectContaining({
+      credentials: 'include'
+    }));
   });
 
   test('form shows and hides correctly when toggled', async () => {
     const user = userEvent;
 
+    // Mock auth check to return unauthenticated
+    fetch.mockResolvedValueOnce({
+      ok: false
+    });
+
     render(<App />);
+    
+    // Wait for auth check and initial render
+    await waitFor(() => {
+      expect(screen.getByText('Login with GitHub')).toBeInTheDocument();
+    });
     
     // Initially form should not be visible
     expect(screen.queryByText('Report a Bug')).not.toBeInTheDocument();

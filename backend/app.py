@@ -7,10 +7,67 @@ import json
 import time
 from datetime import datetime
 import tempfile
+from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import DateTime, func
 
 app = Flask(__name__, static_folder="../frontend/build", static_url_path="/")
 CORS(app)
 app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'dev-secret')
+
+# Database configuration
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///alphatest.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+db = SQLAlchemy(app)
+
+# Database Models
+class User(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    github_id = db.Column(db.Integer, unique=True, nullable=False)
+    username = db.Column(db.String(80), unique=True, nullable=False)
+    email = db.Column(db.String(120), nullable=True)
+    avatar_url = db.Column(db.String(255), nullable=True)
+    access_token = db.Column(db.String(255), nullable=True)
+    created_at = db.Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = db.Column(DateTime(timezone=True), onupdate=func.now())
+    
+    # Relationships
+    repositories = db.relationship('Repository', backref='user', lazy=True)
+    bug_reports = db.relationship('BugReport', backref='user', lazy=True)
+
+class Repository(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    github_id = db.Column(db.Integer, unique=True, nullable=False)
+    name = db.Column(db.String(100), nullable=False)
+    full_name = db.Column(db.String(150), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    html_url = db.Column(db.String(255), nullable=False)
+    clone_url = db.Column(db.String(255), nullable=True)
+    language = db.Column(db.String(50), nullable=True)
+    is_private = db.Column(db.Boolean, default=False)
+    created_at = db.Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = db.Column(DateTime(timezone=True), onupdate=func.now())
+    
+    # Foreign Keys
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    
+    # Relationships
+    bug_reports = db.relationship('BugReport', backref='repository', lazy=True)
+
+class BugReport(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text, nullable=False)
+    device_info = db.Column(db.Text, nullable=True)
+    screenshot_path = db.Column(db.String(255), nullable=True)
+    status = db.Column(db.String(20), default='open')  # open, closed, in_progress
+    priority = db.Column(db.String(10), default='medium')  # low, medium, high, critical
+    client_ip = db.Column(db.String(45), nullable=True)
+    created_at = db.Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = db.Column(DateTime(timezone=True), onupdate=func.now())
+    
+    # Foreign Keys
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    repository_id = db.Column(db.Integer, db.ForeignKey('repository.id'), nullable=True)
 
 # GitHub OAuth configuration
 GITHUB_CLIENT_ID = os.environ.get('GITHUB_CLIENT_ID', 'your_client_id')
@@ -111,7 +168,113 @@ def get_user_info():
 
     return user_resp.json()
 
+@app.route("/api/user")
+def get_current_user():
+    """Get current authenticated user information"""
+    token = session.get('github_token')
+    if not token:
+        return jsonify({"error": "Not authenticated"}), 401
+
+    user_resp = requests.get(
+        "https://api.github.com/user",
+        headers={"Authorization": f"token {token}"}
+    )
+
+    if user_resp.status_code != 200:
+        return jsonify({"error": "Failed to fetch user data"}), 401
+
+    user_data = user_resp.json()
+    
+    # Store or update user in database
+    user = User.query.filter_by(github_id=user_data['id']).first()
+    if not user:
+        user = User(
+            github_id=user_data['id'],
+            username=user_data['login'],
+            email=user_data.get('email'),
+            avatar_url=user_data.get('avatar_url'),
+            access_token=token
+        )
+        db.session.add(user)
+    else:
+        user.username = user_data['login']
+        user.email = user_data.get('email')
+        user.avatar_url = user_data.get('avatar_url')
+        user.access_token = token
+    
+    db.session.commit()
+
+    return jsonify({
+        "user": user_data,
+        "access_token": token
+    })
+
+@app.route("/api/repositories")
+def get_user_repositories():
+    """Fetch and store user repositories from GitHub"""
+    token = session.get('github_token')
+    if not token:
+        return jsonify({"error": "Not authenticated"}), 401
+
+    # Get current user
+    user = User.query.filter_by(access_token=token).first()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    try:
+        # Fetch repositories from GitHub API
+        repos_resp = requests.get(
+            "https://api.github.com/user/repos?per_page=100&sort=updated",
+            headers={"Authorization": f"token {token}"}
+        )
+
+        if repos_resp.status_code != 200:
+            return jsonify({"error": "Failed to fetch repositories"}), 500
+
+        repos_data = repos_resp.json()
+        
+        # Store repositories in database
+        for repo_data in repos_data:
+            repo = Repository.query.filter_by(github_id=repo_data['id']).first()
+            if not repo:
+                repo = Repository(
+                    github_id=repo_data['id'],
+                    name=repo_data['name'],
+                    full_name=repo_data['full_name'],
+                    description=repo_data.get('description'),
+                    html_url=repo_data['html_url'],
+                    clone_url=repo_data.get('clone_url'),
+                    language=repo_data.get('language'),
+                    is_private=repo_data['private'],
+                    user_id=user.id
+                )
+                db.session.add(repo)
+            else:
+                # Update existing repository
+                repo.name = repo_data['name']
+                repo.full_name = repo_data['full_name']
+                repo.description = repo_data.get('description')
+                repo.html_url = repo_data['html_url']
+                repo.clone_url = repo_data.get('clone_url')
+                repo.language = repo_data.get('language')
+                repo.is_private = repo_data['private']
+        
+        db.session.commit()
+
+        return jsonify({
+            "repositories": repos_data,
+            "count": len(repos_data)
+        })
+
+    except Exception as e:
+        return jsonify({"error": f"Failed to process repositories: {str(e)}"}), 500
+
 def allowed_file(filename):
+    if not filename or not filename.strip():
+        return False
+    # Prevent files that start with a dot (hidden files)
+    if filename.startswith('.'):
+        return False
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
@@ -135,16 +298,22 @@ def validate_bug_report_data(data):
     """Validate bug report submission data"""
     errors = []
     
-    if not data.get('title', '').strip():
+    # Ensure title is a string and not empty
+    title = data.get('title', '')
+    if not isinstance(title, str):
+        title = str(title) if title is not None else ''
+    if not title.strip():
         errors.append('Title is required')
-    
-    if not data.get('description', '').strip():
-        errors.append('Description is required')
-    
-    if len(data.get('title', '')) > 200:
+    elif len(title) > 200:
         errors.append('Title must be less than 200 characters')
     
-    if len(data.get('description', '')) > 5000:
+    # Ensure description is a string and not empty
+    description = data.get('description', '')
+    if not isinstance(description, str):
+        description = str(description) if description is not None else ''
+    if not description.strip():
+        errors.append('Description is required')
+    elif len(description) > 5000:
         errors.append('Description must be less than 5000 characters')
     
     return errors
@@ -164,6 +333,7 @@ def submit_bug_report():
     title = request.form.get('title', '').strip()
     description = request.form.get('description', '').strip()
     device_info = request.form.get('deviceInfo', '')
+    repository_id = request.form.get('repository_id')
     
     # Validate required fields
     validation_errors = validate_bug_report_data({
@@ -176,6 +346,12 @@ def submit_bug_report():
             'error': 'Validation failed',
             'details': validation_errors
         }), 400
+
+    # Get current user (optional)
+    user = None
+    token = session.get('github_token')
+    if token:
+        user = User.query.filter_by(access_token=token).first()
     
     # Handle file upload
     screenshot_path = None
@@ -200,52 +376,94 @@ def submit_bug_report():
             
             # Save file
             filename = secure_filename(file.filename)
-            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            filename = f"{timestamp}_{filename}"
-            screenshot_path = os.path.join(UPLOAD_FOLDER, filename)
+            timestamp = int(time.time())
+            unique_filename = f"{timestamp}_{filename}"
+            screenshot_path = os.path.join(UPLOAD_FOLDER, unique_filename)
             file.save(screenshot_path)
-    
-    # Process bug report data
-    bug_report = {
-        'id': f"bug_{int(time.time())}_{hash(client_ip) % 10000}",
-        'title': title,
-        'description': description,
-        'device_info': device_info,
-        'screenshot_path': screenshot_path,
-        'client_ip': client_ip,
-        'submitted_at': datetime.now().isoformat(),
-        'status': 'pending'
-    }
-    
-    # In a real application, you would:
-    # 1. Save to database
-    # 2. Send email notification
-    # 3. Create GitHub issue
-    # 4. Upload file to cloud storage
-    
-    # For now, just log the submission
-    print(f"Bug report submitted: {bug_report}")
-    
-    # Record submission for rate limiting
-    if client_ip not in submission_history:
-        submission_history[client_ip] = []
-    submission_history[client_ip].append(time.time())
-    
-    return jsonify({
-        'success': True,
-        'bug_report_id': bug_report['id'],
-        'message': 'Bug report submitted successfully'
-    }), 201
+
+    # Create bug report in database
+    try:
+        bug_report = BugReport(
+            title=title,
+            description=description,
+            device_info=device_info,
+            screenshot_path=screenshot_path,
+            client_ip=client_ip,
+            user_id=user.id if user else None,
+            repository_id=int(repository_id) if repository_id and repository_id.isdigit() else None
+        )
+        
+        db.session.add(bug_report)
+        db.session.commit()
+        
+        # Update rate limiting
+        if client_ip not in submission_history:
+            submission_history[client_ip] = []
+        submission_history[client_ip].append(time.time())
+        
+        return jsonify({
+            'success': True,
+            'message': 'Bug report submitted successfully',
+            'bug_report_id': bug_report.id
+        }), 201
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'error': f'Failed to save bug report: {str(e)}'
+        }), 500
 
 @app.route('/api/bug-reports', methods=['GET'])
 def get_bug_reports():
-    """Get list of bug reports (for admin/debugging)"""
-    # This would normally query a database
-    # For demo purposes, return empty list
-    return jsonify({
-        'bug_reports': [],
-        'total': 0
-    })
+    """Get list of bug reports from database"""
+    try:
+        # Get optional filters
+        user_id = request.args.get('user_id')
+        repository_id = request.args.get('repository_id')
+        status = request.args.get('status')
+        page = int(request.args.get('page', 1))
+        per_page = min(int(request.args.get('per_page', 10)), 100)
+        
+        # Build query
+        query = BugReport.query
+        
+        if user_id:
+            query = query.filter_by(user_id=user_id)
+        if repository_id:
+            query = query.filter_by(repository_id=repository_id)
+        if status:
+            query = query.filter_by(status=status)
+        
+        # Order by created_at desc
+        query = query.order_by(BugReport.created_at.desc())
+        
+        # Paginate
+        paginated = query.paginate(page=page, per_page=per_page, error_out=False)
+        
+        bug_reports = []
+        for report in paginated.items:
+            bug_reports.append({
+                'id': report.id,
+                'title': report.title,
+                'description': report.description,
+                'status': report.status,
+                'priority': report.priority,
+                'created_at': report.created_at.isoformat() if report.created_at else None,
+                'user': report.user.username if report.user else None,
+                'repository': report.repository.full_name if report.repository else None,
+                'has_screenshot': bool(report.screenshot_path)
+            })
+        
+        return jsonify({
+            'bug_reports': bug_reports,
+            'total': paginated.total,
+            'pages': paginated.pages,
+            'current_page': page,
+            'per_page': per_page
+        })
+        
+    except Exception as e:
+        return jsonify({'error': f'Failed to fetch bug reports: {str(e)}'}), 500
 
 # Error handlers
 @app.errorhandler(405)
@@ -262,5 +480,10 @@ def not_found(error):
     return send_from_directory(app.static_folder, "index.html")
 
 if __name__ == "__main__":
+    # Create database tables
+    with app.app_context():
+        db.create_all()
+        print("Database tables created successfully!")
+    
     debug_mode = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
     app.run(debug=debug_mode, host="0.0.0.0", port=5000)

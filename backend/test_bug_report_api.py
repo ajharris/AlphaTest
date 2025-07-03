@@ -15,12 +15,28 @@ class TestBugReportAPI(unittest.TestCase):
         
         self.app = app.test_client()
         self.app.testing = True
+        
+        # Set up test database
+        app.config['TESTING'] = True
+        app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///:memory:'
+        
+        with app.app_context():
+            from app import db
+            db.create_all()
+        
         # Clear rate limiting history for each test
         submission_history.clear()
 
     def tearDown(self):
         # Cancel the timeout alarm
         signal.alarm(0)
+        
+        # Clean up database
+        with app.app_context():
+            from app import db
+            db.session.remove()
+            db.drop_all()
+        
         # Clean up any uploaded files
         pass
 
@@ -72,17 +88,19 @@ class TestBugReportAPI(unittest.TestCase):
             device_info='Mozilla/5.0 Chrome Windows'
         )
         
-        with patch('builtins.print') as mock_print:
-            response = self.app.post('/api/bug-report',
-                                   data=form_data,
-                                   content_type='multipart/form-data')
-            
-            self.assertEqual(response.status_code, 201)
-            # Verify that print was called with bug report data
-            mock_print.assert_called_once()
-            printed_data = str(mock_print.call_args[0][0])
-            self.assertIn('Critical Bug', printed_data)
-            self.assertIn('This is a critical bug that needs fixing', printed_data)
+        response = self.app.post('/api/bug-report',
+                               data=form_data,
+                               content_type='multipart/form-data')
+        
+        self.assertEqual(response.status_code, 201)
+        
+        # Verify the bug report was saved to database
+        with app.app_context():
+            from app import BugReport
+            bug_report = BugReport.query.filter_by(title='Critical Bug').first()
+            self.assertIsNotNone(bug_report)
+            self.assertEqual(bug_report.description, 'This is a critical bug that needs fixing')
+            self.assertEqual(bug_report.device_info, 'Mozilla/5.0 Chrome Windows')
 
     # Test 2: Missing Required Fields
     def test_missing_title_returns_400_error(self):
@@ -199,8 +217,10 @@ class TestBugReportAPI(unittest.TestCase):
                                data=form_data,
                                content_type='multipart/form-data')
         
-        # Should still succeed but with secure filename
-        self.assertEqual(response.status_code, 201)
+        # The file should be rejected due to the dangerous filename pattern
+        self.assertEqual(response.status_code, 400)
+        data = response.get_json()
+        self.assertIn('Invalid file type', data['error'])
 
     # Test 4: Malicious File Upload Protection
     def test_non_image_file_is_rejected(self):
@@ -276,17 +296,20 @@ Viewport: 1200x800"""
         
         form_data = self.create_test_form_data(device_info=device_info)
         
-        with patch('builtins.print') as mock_print:
-            response = self.app.post('/api/bug-report',
-                                   data=form_data,
-                                   content_type='multipart/form-data')
-            
-            self.assertEqual(response.status_code, 201)
-            # Verify device info is in the logged data
-            printed_data = str(mock_print.call_args[0][0])
-            self.assertIn('Mozilla/5.0', printed_data)
-            self.assertIn('Win32', printed_data)
-            self.assertIn('1920x1080', printed_data)
+        response = self.app.post('/api/bug-report',
+                               data=form_data,
+                               content_type='multipart/form-data')
+        
+        self.assertEqual(response.status_code, 201)
+        
+        # Verify device info is stored in the database
+        with app.app_context():
+            from app import BugReport
+            bug_report = BugReport.query.filter_by(title='Test Bug').first()
+            self.assertIsNotNone(bug_report)
+            self.assertIn('Mozilla/5.0', bug_report.device_info)
+            self.assertIn('Win32', bug_report.device_info)
+            self.assertIn('1920x1080', bug_report.device_info)
 
     def test_malformed_device_info_is_handled(self):
         """Test that malformed device info doesn't break submission"""
